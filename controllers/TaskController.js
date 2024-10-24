@@ -3,16 +3,16 @@
 import { check, validationResult } from 'express-validator';
 import Task from '../models/Task.js';
 import Project from '../models/Project.js';
-import User from '../models/User.js';
 
 const validateTask = [
-    check('name', 'El nombre de la tarea es obligatorio').notEmpty(),
+    check('title', 'El nombre de la tarea es obligatorio').notEmpty(),
     check('description', 'La descripción de la tarea es obligatoria').notEmpty(),
-    check('status', 'El estado de la tarea es obligatorio y debe ser pending, in-progress').notEmpty().isIn(['pending', 'in-progress']),
+    check('status', 'El estado debe ser pending, in-progress o completed')
+    .isIn(['pending', 'in-progress', 'completed']),
 ];
 
 const createTask = async (req, res) => {
-    const { title, description, projectId, assignedTo } = req.body;
+    const { title, description, projectId, assignedTo, status } = req.body;
     const errors = validationResult(req);
 
     try {
@@ -25,9 +25,9 @@ const createTask = async (req, res) => {
             return res.status(404).json({ msg: 'Proyecto no encontrado' });
         }
 
-        const assignedUser = await User.findById(assignedTo);
-        if (!assignedUser) {
-            return res.status(404).json({ msg: 'Usuario no encontrado' });
+        const userInProject = project.users.some(users => users.user.toString() === assignedTo);
+        if (!userInProject) {
+            return res.status(400).json({ msg: 'El usuario no está asignado al proyecto' });
         }
 
         const newTask = new Task({
@@ -35,10 +35,25 @@ const createTask = async (req, res) => {
             description,
             project: projectId,
             assignedTo,
-            createdBy: req.user.id
+            status: status || "pending",
+            createdBy: req.user.id,
+            updatedBy: req.user.id
         });
 
         const taskStored = await newTask.save();
+
+        if (userInProject) {
+            project.users.forEach(user => {
+                if (user.user.toString() === assignedTo && !user.tasks.includes(taskStored._id)) {
+                    user.tasks.push(taskStored._id); // Agregar tarea sin duplicar
+                }
+            });
+        }
+
+        console.log(project.users);
+
+        await project.save();
+        
         return res.status(201).json({ msg: 'Tarea creada con éxito', task: taskStored });
     } catch (error) {
         console.error(error);
@@ -47,7 +62,7 @@ const createTask = async (req, res) => {
 };
 
 const updateTask = async (req, res) => {
-    const { taskId, title, description, status, assignedTo } = req.body;
+    const { taskId, title, description, status } = req.body;
     const errors = validationResult(req);
 
     try {
@@ -60,18 +75,30 @@ const updateTask = async (req, res) => {
             return res.status(404).json({ msg: 'Tarea no encontrada' });
         }
 
-        const project = Project.findById(task.project);
-        if (!project.workers.includes(assignedTo)) {
-            return res.status(404).json({ msg: 'El trabajador no está asignado a este proyecto' });
-        }
-
         task.title = title || task.title;
         task.description = description || task.description;
         task.status = status || task.status;
-        task.assignedTo = assignedTo || task.assignedTo;
         task.updatedBy = req.user.id;
         task.updatedAt = new Date();
 
+        const taskUpdated = await task.save();
+
+        const project = await Project.findById(task.project);
+        if (!project) {
+            return res.status(404).json({ msg: 'Proyecto asociado a la tarea no encontrado' });
+        }
+
+        project.users.forEach(user => {
+            user.tasks = user.tasks.map(userTaskId =>
+                userTaskId.toString() === taskId ? taskUpdated._id : userTaskId
+            );
+        });
+
+        console.log(project.users);
+
+        await project.save();
+
+        return res.status(200).json({ msg: 'Tarea actualizada con éxito', task: taskUpdated });
     } catch (error) {
         console.error(error);
         return res.status(500).json({ msg: 'Error al actualizar la tarea', error: error.message });
@@ -87,7 +114,19 @@ const deleteTask = async (req, res) => {
             return res.status(404).json({ msg: 'Tarea no encontrada' });
         }
 
-        await task.remove();
+        const project = await Project.findById(task.project);
+        if (!project) {
+            return res.status(404).json({ msg: 'Proyecto asociado a la tarea no encontrado' });
+        }
+
+        project.users.forEach(user => {
+            user.tasks = user.tasks.filter(taskIdInUser => taskIdInUser.toString() !== task._id.toString());
+        });
+
+        await project.save();
+
+        await Task.findByIdAndDelete(taskId);
+
         return res.status(200).json({ msg: 'Tarea eliminada con éxito' });
     } catch (error) {
         console.error(error);
@@ -95,32 +134,9 @@ const deleteTask = async (req, res) => {
     }
 };
 
-const updateTaskStatus = async (req, res) => {
-    const { taskId, status } = req.body;
-
-    try {
-        const task = await Task.findById(taskId);
-        if (!task) {
-            return res.status(404).json({ msg: 'Tarea no encontrada' });
-        }
-
-        task.status = status;
-        task.updatedBy = req.user.id;
-        task.updatedAt = new Date();
-
-        const taskUpdated = await task.save();
-        return res.status(200).json({ msg: 'Estado de la tarea actualizado con éxito', task: taskUpdated });
-    } catch (error) {
-        console.error(error);
-        return res.status(500).json({ msg: 'Error al actualizar el estado de la tarea', error: error.message });
-    }
-};
-
 const listTasksByUser = async (req, res) => {
-    const userId = req.user.id;
-    
     try {
-        const tasks = await Task.find({ assingedTo: userId });
+        const tasks = await Task.find({ assignedTo: req.user.id });
         return res.status(200).json({ tasks });
     } catch (error) {
         console.error(error);
@@ -156,6 +172,5 @@ export {
     listTasksByUser,
     updateTask,
     deleteTask,
-    updateTaskStatus,
     listTopPerformers
 };

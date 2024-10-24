@@ -8,7 +8,7 @@ const TaskSchema = new Schema({
     description: { type: String, required: true},
     status: {
         type: String,
-        enum: ['pending, in-progress', 'completed'],
+        enum: ['pending', 'in-progress', 'completed'],
         default: 'pending'
     },
     project: { type: Schema.Types.ObjectId, ref: 'Project', required: true },

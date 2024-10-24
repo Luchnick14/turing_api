@@ -12,15 +12,10 @@ const ProjectSchema = new Schema({
         enum: ['Active', 'Inactive'], 
         required: true 
     },
-    admins: [{
-        admin: { type: Schema.Types.ObjectId, ref: 'User' },
+    users: [{
+        user: { type: Schema.Types.ObjectId, ref: 'User' },
         tasks: [{ type: Schema.Types.ObjectId, ref: 'Task' }]
     }],
-    workers: [{
-        worker: { type: Schema.Types.ObjectId, ref: 'User' },
-        tasks: [{ type: Schema.Types.ObjectId, ref: 'Task' }]
-    }],
-    tasks: [{ type: Schema.Types.ObjectId, ref: 'Task' }],
     deleted: { type: Boolean, default: false }
 });
 

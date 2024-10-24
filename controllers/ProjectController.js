@@ -28,7 +28,7 @@ const createProject = async (req, res) => {
             description,
             createdBy: req.user.id,
             status: status || 'Inctive',
-            workers: []
+            users: []
         });
 
         const projectStored = await newProject.save();
@@ -42,7 +42,7 @@ const createProject = async (req, res) => {
 
 const listProjects = async (req, res) => {
     try {
-        const projects = await Project.find();
+        const projects = await Project.find({ deleted: false });
         return res.status(200).json({ projects });
     } catch (error) {
         console.error(error);
@@ -92,35 +92,39 @@ const deleteProject = async (req, res) => {
         
         project.deleted = true;
         await project.save();
-        return res.status(200).json({ msg: 'Proyecto eliminado con éxito', project });
+
+        return res.status(200).json({ msg: 'Proyecto eliminado con éxito' });
     } catch (error) {
         console.error(error);
         return res.status(500).json({ msg: 'Error al eliminar el proyecto', error: error.message });
     }
 };
 
-const assignWorkerToProject = async (req, res) => {
-    const { projectId, workersIds } = req.body;
-    if (!Array.isArray(workersIds) || workersIds.length === 0) {
+const assignUserToProject = async (req, res) => {
+    const { projectId, usersIds } = req.body;
+    if (!Array.isArray(usersIds) || usersIds.length === 0) {
         return res.status(400).json({ msg: 'Debes proporcionar un array de IDs de trabajadores.' });
     }
 
     try {
-        const project = await Project.findById({ _id: projectId });
+        const project = await Project.findById({ _id: projectId, deleted: false });
         if (!project){
             return res.status(400).json({ msg: 'El proyecto no es válido' });
         }
 
-        const workers = await User.find({ _id: { $in: workersIds } });
-        if (workers.length !== workersIds.length) {
+        const users = await User.find({ _id: { $in: usersIds } });
+        if (users.length !== usersIds.length) {
             return res.status(400).json({ msg: 'Uno o más trabajadores no son válidos.' });
         }
 
-        workers.forEach(worker => {
-            const alreadyInProject = project.workers.some(workerId => workerId._id.toString() === worker._id.toString());
-        
+        users.forEach(user => {
+            const alreadyInProject = project.users.some(projectUser => 
+                projectUser.user.toString() === user._id.toString()
+            );
+
+            // Si el usuario no está asignado al proyecto, lo añadimos
             if (!alreadyInProject) {
-                project.workers.push(worker._id);
+                project.users.push({ user: user._id });
             }
         });
 
@@ -135,7 +139,7 @@ const assignWorkerToProject = async (req, res) => {
     }
 };
 
-const removeWorkerFromProject = async (req, res) => {
+const removeUserFromProject = async (req, res) => {
     const { projectId, workerId } = req.body;
 
     try {
@@ -164,35 +168,6 @@ const removeWorkerFromProject = async (req, res) => {
     }
 };
 
-const assignAdminToProject = async (req, res) => {
-    const { projectId, adminId } = req.body;
-
-    try {
-        const project = await Project.findById({ _id: projectId });
-        if (!project){
-            return res.status(400).json({ msg: 'El proyecto no es válido' });
-        }
-
-        const admin = await User.findById({ _id: adminId });
-        if (!admin || admin.role !== 'Admin'){
-            return res.status(400).json({ msg: 'El administrador no es válido' });
-        }
-
-        const alreadyInProject = project.admins.some(adminId => adminId._id.toString() === admin._id.toString());
-        if (alreadyInProject) {
-            return res.status(400).json({ msg: 'El administrador ya está asignado al proyecto' });
-        }
-        project.admins.push(adminId);
-        
-        const projectUpdated = await project.save();
-
-        return res.status(200).json({ msg: 'Administrador asignado con éxito', projectUpdated });
-    } catch (error) {
-        console.error(error);
-        return res.status(500).json({ msg: 'Error al asignar el administrador al proyecto', error: error.message });
-    }
-};
-
 
 export {
     validateProjectCreation,
@@ -200,7 +175,6 @@ export {
     listProjects,
     updateProject,
     deleteProject,
-    assignWorkerToProject,
-    removeWorkerFromProject,
-    assignAdminToProject
+    assignUserToProject,
+    removeUserFromProject
 };
