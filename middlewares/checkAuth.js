@@ -1,11 +1,17 @@
-'use strict'
+'use strict';
 
 import jwt from 'jsonwebtoken';
 
 const checkAuth = (req, res, next) => {
-    const token = req.cookies.access_token;
+    const authHeader = req.headers.authorization;
+    console.log(req.headers);
+    if (!authHeader) {
+        return res.status(401).json({ msg: 'No autorizado, token faltante' });
+    }
+
+    const token = authHeader.split(' ')[1];
     if (!token) {
-        return res.status(401).json({ msg: 'No autorizado' });
+        return res.status(401).json({ msg: 'No autorizado, token no encontrado' });
     }
 
     try {

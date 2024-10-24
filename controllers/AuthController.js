@@ -41,15 +41,9 @@ const loginUser = async (req, res) => {
     
         const token = generateToken(user);
     
-        return res.status(200).cookie('access_token', token,
-            {
-                httpOnly: true,
-                secure: process.env.NODE_ENV === 'production',
-                sameSite: 'strict'
-            }
-        ).json({
+        return res.status(200).json({
             msg: 'Inicio de sesión exitoso',
-            token,
+            token, // Asegúrate de que el token se envía correctamente al frontend
             user: {
                 name: user.name,
                 email: user.email,
@@ -60,7 +54,8 @@ const loginUser = async (req, res) => {
         console.error(error);
         return res.status(500).json({ msg: 'Error en el servidor', error: error.message });
     }
-}
+};
+
 
 export {
     validateLogin,
