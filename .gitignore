@@ -1,0 +1,3 @@
+# Ignorar directorios y archivos de configuración
+node_modules/
+.env
